@@ -81,6 +81,51 @@ GPU 机、SSM 隧道、显存切换与成本控制见 [infra.md](references/infr
 
 完整的"症状 → 原因 → 处理"表在 [qa.md](references/qa.md) §2。
 
+## 安装
+
+`SKILL.md` 用的是 [Agent Skills](https://agentskills.io) 开放标准（frontmatter 只有 `name` + `description`），
+所以不绑定任何一家工具——放到对应目录就能被自动发现。
+
+### Claude Code
+
+```bash
+# 个人级：所有项目都可用
+git clone https://github.com/xiwan/scroll-painting-animation.git \
+  ~/.claude/skills/scroll-painting-animation
+
+# 或项目级：提交进仓库，团队共享
+git clone https://github.com/xiwan/scroll-painting-animation.git \
+  .claude/skills/scroll-painting-animation
+```
+
+装好后 `/skills` 里能看到它。两种用法：
+
+- **让 Claude 自动加载**——说「把《千里江山图》做成横向长卷动画」这类话，匹配到 frontmatter 的 description 就会加载
+- **显式调用**——输入 `/scroll-painting-animation`
+
+### Kiro
+
+```bash
+git clone https://github.com/xiwan/scroll-painting-animation.git \
+  ~/.kiro/skills/scroll-painting-animation
+```
+
+同样靠 description 触发，或在对话里用 `#` 手动引用。
+
+### 其他 agent（Codex CLI / Cursor / Gemini CLI / Windsurf …）
+
+这些工具对 skill 的发现机制各不相同，但内容是纯 markdown，最省事的办法是 clone 到任意位置，
+然后在项目的 `AGENTS.md` / `CLAUDE.md` / 规则文件里加一行指路：
+
+```markdown
+做长卷/卷轴动画类任务时，先读 <path>/SKILL.md，按里面的九步流程和门槛执行。
+```
+
+### 只当文档库读
+
+不装也行：`SKILL.md` 是入口（流程 + 门槛 + 文件索引），`references/` 下 10 篇是每步的细节，
+`scripts/` 可以直接 `python scripts/scroll_demo.py render` 跑起来，不依赖任何 agent。
+
 ## 快速开始
 
 ```bash
@@ -97,16 +142,6 @@ python scripts/popcheck.py /tmp/demo.mp4 --skip 20                    # 跳帧�
 
 依赖：Python 3.10+、numpy、Pillow、imageio-ffmpeg；中文字体（macOS 自带楷体，Linux 装 Noto CJK）。
 GPU 部分（ComfyUI 出精灵、MMAudio 出音效）在远端机器上跑，见 `infra.md`。
-
-## 作为 Kiro Skill 安装
-
-```bash
-git clone https://github.com/xiwan/scroll-painting-animation.git \
-  ~/.kiro/skills/scroll-painting-animation
-```
-
-之后对智能体说「把《千里江山图》做成长卷动画」这类话，skill 会按 `SKILL.md` 的 frontmatter 被触发。
-也可以直接当文档库读——`SKILL.md` 是入口，`references/` 是九步的细节。
 
 ## 仓库结构
 

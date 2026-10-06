@@ -138,7 +138,14 @@ description: >
 
 ```bash
 python -m pip install numpy pillow imageio-ffmpeg               # 没有这三个就先装（系统自带的 python3 通常没有 numpy）
-S=~/.kiro/skills/scroll-painting-animation/scripts
+
+# S 指向本 skill 的 scripts 目录。按安装位置取其一：
+#   Claude Code（个人）  S=~/.claude/skills/scroll-painting-animation/scripts
+#   Claude Code（项目）  S=.claude/skills/scroll-painting-animation/scripts
+#   Kiro                S=~/.kiro/skills/scroll-painting-animation/scripts
+#   直接 clone 的仓库     S=<repo>/scripts
+S=~/.claude/skills/scroll-painting-animation/scripts
+
 python $S/scroll_demo.py stats                                  # 看功能团与选图是否合理
 python $S/scroll_demo.py preview 2 7.6 10 12.6 --out /tmp/demo  # 白天 / 入夜 / 夜 / 黎明 各一帧
 python $S/scroll_demo.py render --out /tmp/demo.mp4             # 14 秒小样（约 10 秒出完）
