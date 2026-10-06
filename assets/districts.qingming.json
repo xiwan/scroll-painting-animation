@@ -1,0 +1,508 @@
+{
+ "_说明": "《清明上河图》180 秒长卷（镜头 85.7 世界单位/秒，u = gx − gy，t ≈ (cos30·u − VW/2)/CAM）用过的功能团配置，可直接作为北宋都城/古代城镇题材的起点；别的题材按 references/layout.md 改团名、比例和亲和度。",
+ "districts": [
+  [
+   "wild",
+   -3000,
+   2800,
+   "约 0–20.3 秒"
+  ],
+  [
+   "village",
+   2800,
+   4900,
+   "约 20.3–41.5 秒"
+  ],
+  [
+   "caoshi",
+   4900,
+   6900,
+   "约 41.5–61.7 秒"
+  ],
+  [
+   "dock",
+   6900,
+   8300,
+   "约 61.7–75.9 秒"
+  ],
+  [
+   "bridge",
+   8300,
+   9900,
+   "约 75.9–92.0 秒"
+  ],
+  [
+   "suburb",
+   9900,
+   11500,
+   "约 92.0–108.2 秒"
+  ],
+  [
+   "gate",
+   11500,
+   12500,
+   "约 108.2–118.3 秒"
+  ],
+  [
+   "core",
+   12500,
+   14500,
+   "约 118.3–138.5 秒"
+  ],
+  [
+   "wazi",
+   14500,
+   15700,
+   "约 138.5–150.6 秒"
+  ],
+  [
+   "lanes",
+   15700,
+   16600,
+   "约 150.6–159.7 秒"
+  ],
+  [
+   "temple",
+   16600,
+   17800,
+   "约 159.7–171.8 秒"
+  ],
+  [
+   "gov",
+   17800,
+   21000,
+   "约 171.8–180 秒"
+  ]
+ ],
+ "edge_u": 420.0,
+ "profiles": {
+  "wild": {
+   "dens": 0.55,
+   "gap": 1.2,
+   "kinds": {
+    "mud": 1.0
+   },
+   "light": 0.2
+  },
+  "village": {
+   "dens": 0.7,
+   "gap": 1.0,
+   "kinds": {
+    "mud": 0.72,
+    "res": 0.14,
+    "tea": 0.14
+   },
+   "light": 0.3
+  },
+  "caoshi": {
+   "dens": 0.8,
+   "gap": 0.55,
+   "kinds": {
+    "mud": 0.15,
+    "res": 0.25,
+    "tea": 0.2,
+    "tavern": 0.2,
+    "shop": 0.2
+   },
+   "light": 0.6
+  },
+  "dock": {
+   "dens": 0.85,
+   "gap": 1.0,
+   "kinds": {
+    "ware": 0.45,
+    "res2": 0.15,
+    "tavern": 0.15,
+    "tea": 0.1,
+    "shop": 0.15
+   },
+   "light": 0.6
+  },
+  "bridge": {
+   "dens": 1.0,
+   "gap": 0.45,
+   "kinds": {
+    "tavern": 0.3,
+    "tea": 0.3,
+    "shop": 0.3,
+    "res2": 0.1
+   },
+   "light": 1.0
+  },
+  "suburb": {
+   "dens": 0.78,
+   "gap": 1.0,
+   "kinds": {
+    "shop": 0.5,
+    "res": 0.3,
+    "res2": 0.1,
+    "tavern": 0.05,
+    "tea": 0.05
+   },
+   "light": 0.7
+  },
+  "gate": {
+   "dens": 0.55,
+   "gap": 1.6,
+   "kinds": {
+    "res2": 0.35,
+    "tavern": 0.2,
+    "ware": 0.2,
+    "shop": 0.25
+   },
+   "light": 0.7
+  },
+  "core": {
+   "dens": 0.98,
+   "gap": 0.45,
+   "kinds": {
+    "shop": 0.6,
+    "tavern": 0.2,
+    "tea": 0.1,
+    "res2": 0.1
+   },
+   "light": 1.0
+  },
+  "wazi": {
+   "dens": 0.9,
+   "gap": 0.7,
+   "kinds": {
+    "tea": 0.3,
+    "tavern": 0.2,
+    "shop": 0.15,
+    "res": 0.2,
+    "res2": 0.15
+   },
+   "light": 0.95
+  },
+  "lanes": {
+   "dens": 0.72,
+   "gap": 1.5,
+   "kinds": {
+    "res": 0.5,
+    "res2": 0.4,
+    "shop": 0.1
+   },
+   "light": 0.45
+  },
+  "temple": {
+   "dens": 0.78,
+   "gap": 1.1,
+   "kinds": {
+    "shop": 0.5,
+    "tea": 0.15,
+    "tavern": 0.1,
+    "res": 0.15,
+    "res2": 0.1
+   },
+   "light": 0.6
+  },
+  "gov": {
+   "dens": 0.6,
+   "gap": 1.8,
+   "kinds": {
+    "res": 0.5,
+    "res2": 0.5
+   },
+   "light": 0.35
+  }
+ },
+ "lay_probs_mansion_court": {
+  "lanes": [
+   0.25,
+   0.4
+  ],
+  "gov": [
+   0.2,
+   0.55
+  ],
+  "temple": [
+   0.03,
+   0.25
+  ],
+  "wazi": [
+   0.03,
+   0.2
+  ],
+  "core": [
+   0.0,
+   0.08
+  ],
+  "suburb": [
+   0.0,
+   0.2
+  ],
+  "gate": [
+   0.0,
+   0.15
+  ]
+ },
+ "groups": {
+  "farm": [
+   "bld_farm",
+   "bld_farm2",
+   "bld_thatch",
+   "bld_thatch2",
+   "bld_vil_farmyarda",
+   "bld_vil_farmyardb"
+  ],
+  "village": [
+   "bld_village",
+   "bld_schoola",
+   "bld_schoolb"
+  ],
+  "roadside": [
+   "bld_wineshed",
+   "bld_teasheda",
+   "bld_teashedb",
+   "bld_shed"
+  ],
+  "eatery": [
+   "bld_prt_eaterya",
+   "bld_prt_eateryb",
+   "bld_cty_noodlea",
+   "bld_cty_noodleb",
+   "bld_bakery"
+  ],
+  "inn": [
+   "bld_prt_inna",
+   "bld_prt_innb",
+   "bld_didiana",
+   "bld_didianb"
+  ],
+  "tavern": [
+   "bld_tavern",
+   "bld_tavern2",
+   "bld_winehouse"
+  ],
+  "tea": [
+   "bld_teahouse",
+   "bld_tea2",
+   "bld_teahouse3"
+  ],
+  "ware": [
+   "bld_ware",
+   "bld_granary",
+   "bld_prt_timberyarda",
+   "bld_prt_timberyardb"
+  ],
+  "workshop": [
+   "bld_smithy",
+   "bld_carpenter",
+   "bld_cartshop",
+   "bld_cty_bambooa",
+   "bld_cty_bamboob",
+   "bld_cty_pottera",
+   "bld_cty_potterb"
+  ],
+  "daily": [
+   "bld_shop",
+   "bld_shop2",
+   "bld_rice",
+   "bld_butcher",
+   "bld_cty_gableshopa",
+   "bld_cty_gableshopb",
+   "bld_cty_oila",
+   "bld_cty_oilb",
+   "bld_lantern"
+  ],
+  "lux": [
+   "bld_silk",
+   "bld_gold",
+   "bld_pawn",
+   "bld_bookshop",
+   "bld_cty_fana",
+   "bld_cty_fanb",
+   "bld_cty_tailora",
+   "bld_cty_tailorb",
+   "bld_cty_cornera",
+   "bld_cty_cornerb",
+   "bld_2fshop"
+  ],
+  "res_s": [
+   "bld_house3",
+   "bld_house2",
+   "bld_cty_hiphousea",
+   "bld_cty_hiphouseb"
+  ],
+  "res_b": [
+   "bld_courtyard",
+   "bld_cty_timbera",
+   "bld_cty_timberb",
+   "bld_cty_walleda",
+   "bld_cty_walledb"
+  ],
+  "official": [
+   "bld_cty_xieshana",
+   "bld_cty_xieshanb"
+  ]
+ },
+ "group_kinds": {
+  "farm": [
+   "mud"
+  ],
+  "village": [
+   "mud",
+   "res"
+  ],
+  "roadside": [
+   "tavern",
+   "tea"
+  ],
+  "eatery": [
+   "shop",
+   "tavern",
+   "tea"
+  ],
+  "inn": [
+   "res2",
+   "tavern"
+  ],
+  "tavern": [
+   "tavern"
+  ],
+  "tea": [
+   "tea"
+  ],
+  "ware": [
+   "ware"
+  ],
+  "workshop": [
+   "shop"
+  ],
+  "daily": [
+   "shop"
+  ],
+  "lux": [
+   "res2",
+   "shop"
+  ],
+  "res_s": [
+   "res",
+   "res2"
+  ],
+  "res_b": [
+   "res",
+   "res2"
+  ],
+  "official": [
+   "res",
+   "res2"
+  ]
+ },
+ "affinity": {
+  "wild": {
+   "farm": 1,
+   "village": 0.25,
+   "roadside": 0.1
+  },
+  "village": {
+   "farm": 1,
+   "village": 0.7,
+   "roadside": 0.5,
+   "res_s": 0.15
+  },
+  "caoshi": {
+   "village": 0.6,
+   "farm": 0.3,
+   "roadside": 0.7,
+   "eatery": 1,
+   "inn": 0.5,
+   "tea": 0.6,
+   "tavern": 0.5,
+   "daily": 0.4,
+   "res_s": 0.5,
+   "ware": 0.2
+  },
+  "dock": {
+   "ware": 1.2,
+   "inn": 0.9,
+   "eatery": 0.8,
+   "tavern": 0.4,
+   "tea": 0.4,
+   "daily": 0.3,
+   "res_s": 0.3,
+   "workshop": 0.3,
+   "roadside": 0.3
+  },
+  "bridge": {
+   "eatery": 1,
+   "tavern": 1,
+   "tea": 1,
+   "daily": 0.8,
+   "inn": 0.5,
+   "lux": 0.3,
+   "res_s": 0.3
+  },
+  "suburb": {
+   "workshop": 1.2,
+   "daily": 0.8,
+   "res_s": 0.8,
+   "res_b": 0.3,
+   "eatery": 0.5,
+   "tavern": 0.4,
+   "tea": 0.4,
+   "inn": 0.3,
+   "village": 0.3,
+   "roadside": 0.3
+  },
+  "gate": {
+   "inn": 1.2,
+   "eatery": 0.6,
+   "tavern": 0.5,
+   "ware": 0.6,
+   "workshop": 0.4,
+   "daily": 0.5,
+   "res_s": 0.3,
+   "roadside": 0.4
+  },
+  "core": {
+   "lux": 1.2,
+   "daily": 0.7,
+   "tavern": 0.9,
+   "tea": 0.6,
+   "res_s": 0.4,
+   "res_b": 0.2,
+   "inn": 0.3,
+   "eatery": 0.4
+  },
+  "wazi": {
+   "tea": 1,
+   "eatery": 0.9,
+   "tavern": 0.7,
+   "res_s": 0.8,
+   "res_b": 0.3,
+   "daily": 0.4,
+   "lux": 0.3
+  },
+  "lanes": {
+   "res_s": 1,
+   "res_b": 1,
+   "daily": 0.3,
+   "lux": 0.2,
+   "tea": 0.2,
+   "official": 0.2,
+   "workshop": 0.2
+  },
+  "temple": {
+   "daily": 0.8,
+   "workshop": 0.5,
+   "eatery": 0.6,
+   "tea": 0.5,
+   "lux": 0.5,
+   "res_s": 0.5,
+   "res_b": 0.4,
+   "tavern": 0.2
+  },
+  "gov": {
+   "official": 1,
+   "res_b": 1,
+   "res_s": 0.3,
+   "tea": 0.15,
+   "daily": 0.1,
+   "lux": 0.1
+  }
+ },
+ "wall_clamp": "城内（gx > 城墙）u 至少 12750，城外 u 至多 12250：城内外的团互不渗透",
+ "landmarks_timeline": "石桥 26s / 十千脚店 79s / 城外街市·王家纸马 102s / 铁匠 107s / 木匠 112s / 望火楼 117s / 税务 120s / 孙羊正店 123s / 刘家香铺 133s / 算命 134s / 瓦子 138s / 说书 141s / 赵太丞家 147s / 久住王员外家 157s / 大相国寺 164s / 谯楼 171s / 官署 176s；入夜 117–134s，黎明 157–173s"
+}

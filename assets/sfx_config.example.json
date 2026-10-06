@@ -1,0 +1,269 @@
+{
+ "_说明": "《清明上河图》180 秒长卷动画实际用过的音效配置。scenes: [起, 止, 提示词, 增益dB]；fix: 窗口名 → [替换提示词, 种子偏移]；want: 窗口名 → 想要的 AudioSet 标签（search 打分用）；events: [名, 起始秒, 时长, 提示词, 增益dB, 想要的标签]。",
+ "video": "film_silent.mp4",
+ "output_video": "film_with_sfx.mp4",
+ "duration": 180.0,
+ "win": 10.0,
+ "step": 8.0,
+ "sr": 44100,
+ "negative": "music, singing, modern vehicles, car engine, electronic sounds, English speech",
+ "scenes": [
+  [
+   0,
+   40,
+   "light spring rain pattering on leaves and fields, birds chirping, a soft breeze, a distant rooster crowing, peaceful ancient Chinese countryside",
+   0.0
+  ],
+  [
+   40,
+   52,
+   "birds singing over spring fields after the rain, a gentle breeze, children laughing far away, an ox lowing in the distance",
+   0.0
+  ],
+  [
+   52,
+   76,
+   "flowing river water, wooden boat oars creaking and splashing, boatmen calling out, busy market chatter on the riverbank",
+   0.0
+  ],
+  [
+   76,
+   92,
+   "a large crowd on a wooden bridge shouting in alarm, boatmen yelling urgently, wooden mast creaking and knocking, water splashing hard, chaotic excited crowd",
+   3.0
+  ],
+  [
+   92,
+   110,
+   "bustling ancient street market, vendors calling out, many footsteps, ox cart wooden wheels creaking, a blacksmith hammering metal on an anvil",
+   0.0
+  ],
+  [
+   110,
+   122,
+   "camel bells jingling, hooves clopping on stone, a busy crowd passing through a city gate",
+   1.0
+  ],
+  [
+   122,
+   136,
+   "a bustling prosperous ancient Chinese city street at dusk, lively crowds chattering and laughing, vendors calling out, horse hooves, cups clinking in wine houses",
+   1.0
+  ],
+  [
+   136,
+   157,
+   "night in an ancient Chinese town, crickets chirping, soft chatter and laughter from teahouses, a light breeze",
+   -3.0
+  ],
+  [
+   157,
+   172,
+   "early dawn in an ancient town, roosters crowing in the distance, birds beginning to chirp, crickets fading, a few footsteps",
+   -2.0
+  ],
+  [
+   172,
+   181,
+   "early morning in an ancient town, birds singing, wooden doors opening, first footsteps in the street, a calm breeze",
+   -1.0
+  ]
+ ],
+ "fix": {
+  "w00": [
+   "steady spring rain pouring on leaves, grass and a thatched roof, raindrops dripping, a few birds chirping softly",
+   7
+  ],
+  "w01": [
+   "steady spring rain pouring on leaves, grass and a thatched roof, raindrops dripping, a few birds chirping softly",
+   8
+  ],
+  "w02": [
+   "light rain falling on fields and trees, raindrops pattering, birds chirping, a soft breeze",
+   9
+  ],
+  "w03": [
+   "light rain easing off over the countryside, raindrops dripping from leaves, birds singing",
+   10
+  ],
+  "w10": [
+   "a crowd of people on a bridge shouting and yelling in alarm, men shouting orders to each other, loud excited crowd, wood creaking",
+   11
+  ],
+  "w14": [
+   "large camel bells clanking slowly, hooves clopping on stone paving, a crowd murmuring at a busy city gate",
+   12
+  ]
+ },
+ "want": {
+  "w10": [
+   "Shout",
+   "Yell",
+   "Crowd",
+   "Hubbub, speech noise, speech babble",
+   "Chatter",
+   "Speech",
+   "Children shouting",
+   "Cheering",
+   "Splash, splatter",
+   "Boat, Water vehicle"
+  ],
+  "w11": [
+   "Speech",
+   "Chatter",
+   "Hubbub, speech noise, speech babble",
+   "Crowd",
+   "Walk, footsteps",
+   "Hammer",
+   "Clip-clop"
+  ],
+  "w14": [
+   "Jingle bell",
+   "Bell",
+   "Clip-clop",
+   "Horse",
+   "Crowd",
+   "Hubbub, speech noise, speech babble",
+   "Speech",
+   "Walk, footsteps"
+  ],
+  "w09": [
+   "Speech",
+   "Chatter",
+   "Crowd",
+   "Hubbub, speech noise, speech babble",
+   "Boat, Water vehicle",
+   "Stream",
+   "Rowboat, canoe, kayak"
+  ],
+  "w15": [
+   "Speech",
+   "Chatter",
+   "Hubbub, speech noise, speech babble",
+   "Crowd",
+   "Walk, footsteps",
+   "Clip-clop",
+   "Chink, clink",
+   "Laughter"
+  ],
+  "w16": [
+   "Speech",
+   "Chatter",
+   "Hubbub, speech noise, speech babble",
+   "Crowd",
+   "Walk, footsteps",
+   "Laughter",
+   "Chink, clink",
+   "Cricket"
+  ]
+ },
+ "events": [
+  [
+   "kids_kite",
+   41.0,
+   10.0,
+   "children laughing and shouting happily while playing outdoors and flying kites in a field, a gentle breeze",
+   -3.0,
+   [
+    "Children playing",
+    "Child speech, kid speaking",
+    "Children shouting",
+    "Laughter",
+    "Giggle",
+    "Chuckle, chortle"
+   ]
+  ],
+  [
+   "kids_market",
+   92.0,
+   8.0,
+   "a group of children playing and laughing in a busy street, running footsteps, happy shouts",
+   -6.0,
+   [
+    "Children playing",
+    "Child speech, kid speaking",
+    "Children shouting",
+    "Laughter",
+    "Run",
+    "Giggle"
+   ]
+  ],
+  [
+   "gate_open",
+   111.0,
+   8.0,
+   "a huge heavy wooden city gate slowly creaking open, big iron hinges groaning, a heavy wooden beam being lifted and dropped",
+   -1.0,
+   [
+    "Creak",
+    "Door",
+    "Squeak",
+    "Wood",
+    "Sliding door",
+    "Thump, thud",
+    "Knock"
+   ]
+  ],
+  [
+   "story",
+   137.0,
+   9.0,
+   "a man telling a story animatedly and striking a wooden clapper on a table, an audience laughing and applauding",
+   -5.0,
+   [
+    "Speech",
+    "Male speech, man speaking",
+    "Narration, monologue",
+    "Laughter",
+    "Applause",
+    "Clapping",
+    "Crowd"
+   ]
+  ],
+  [
+   "rooster",
+   158.5,
+   8.0,
+   "several roosters crowing at dawn in a village, birds beginning to chirp",
+   -3.0,
+   [
+    "Chicken, rooster",
+    "Crowing, cock-a-doodle-doo",
+    "Fowl",
+    "Bird",
+    "Bird vocalization, bird call, bird song"
+   ]
+  ],
+  [
+   "bell",
+   170.5,
+   10.0,
+   "a large bronze temple bell struck slowly three times, deep resonant ringing with a long decay, a quiet morning",
+   1.0,
+   [
+    "Church bell",
+    "Bell",
+    "Gong",
+    "Change ringing (campanology)",
+    "Singing bowl"
+   ]
+  ]
+ ],
+ "out_dir": "sfx",
+ "work_dir": "/tmp/sfx_work",
+ "target_rms_db": -21.0,
+ "limit": 0.7,
+ "remote": {
+  "runner": [
+   "/path/to/skill/scripts/ssm_run.sh",
+   "{cmd}",
+   "{timeout}"
+  ],
+  "comfy": "http://127.0.0.1:18188",
+  "comfy_dir": "/opt/ComfyUI",
+  "mmaudio_dir": "/opt/mmaudio/src",
+  "mmaudio_python": "/opt/mmaudio/venv/bin/python",
+  "tagger_python": "/opt/ComfyUI/venv/bin/python",
+  "remote_work": "/opt/mmaudio/work"
+ }
+}

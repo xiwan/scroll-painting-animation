@@ -1,0 +1,44 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# 本地环境与凭据（切勿提交）
+.env
+.env.*
+*.pem
+*.key
+credentials
+aws_config
+.aws/
+secrets.json
+
+# 素材、成片、中间产物（体积大，不入库）
+output/
+out/
+preview/
+review/
+backup/
+backup_*/
+assets_*/
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.flac
+*.npz
+*.safetensors
+*.ckpt
+*.pt
+
+# 本地生成的图片（README 用图在 docs/images，已显式加白）
+*.png
+*.jpg
+*.jpeg
+!docs/images/*.jpg
