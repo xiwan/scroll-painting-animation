@@ -21,6 +21,8 @@ GPU 机上的 MMAudio 安装见 references/audio.md。权重许可 CC BY-NC 4.0�
 """
 import json
 import os
+import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -31,6 +33,54 @@ import uuid
 from pathlib import Path
 
 import numpy as np
+
+# ---- 配置校验：配置文件里的路径/名字会进 shell 命令和文件路径，先卡住再用 ----
+_NAME_RE = re.compile(r"[A-Za-z0-9_-]{1,48}\Z")          # 窗口名、场景音效名
+_RPATH_RE = re.compile(r"/[A-Za-z0-9._+@/-]*\Z")         # 远端绝对路径：不含空格与 shell 元字符
+
+
+def _safe_name(v, what):
+    if not isinstance(v, str) or not _NAME_RE.match(v):
+        raise SystemExit(f"配置里的 {what} 非法：{v!r}（只允许字母数字 _ - ，1–48 字符）")
+    return v
+
+
+def _safe_rpath(v, what):
+    """远端路径：必须是绝对路径、不含 .. 、不含空格和 shell 元字符，且不是 / 或一级目录。"""
+    if not isinstance(v, str) or not _RPATH_RE.match(v) or ".." in v.split("/"):
+        raise SystemExit(f"配置里的 {what} 非法：{v!r}（需绝对路径，只允许 A-Za-z0-9 . _ + @ - / ）")
+    if len([p for p in v.split("/") if p]) < 2:
+        raise SystemExit(f"配置里的 {what} 层级太浅：{v!r}（至少两级，避免误删）")
+    return v.rstrip("/")
+
+
+def _safe_url(v, what, allow_remote=False):
+    """只允许 http/https；默认只允许回环地址，跨机访问必须显式放开（防 SSRF 与素材外传）。"""
+    u = urllib.parse.urlparse(v)
+    if u.scheme not in ("http", "https"):
+        raise SystemExit(f"配置里的 {what} 只允许 http/https：{v!r}")
+    host = (u.hostname or "").lower()
+    local = host in ("127.0.0.1", "::1", "localhost") or host.startswith("127.")
+    if not local and not allow_remote:
+        raise SystemExit(
+            f"{what} 指向非本机地址 {host}；片段会被上传到该地址。确认无误后设环境变量 "
+            f"SFX_ALLOW_REMOTE_HOST=1 再跑（建议改用 SSM/SSH 端口转发到 127.0.0.1）")
+    return v.rstrip("/")
+
+
+_SECRET_RE = re.compile(r"(?i)\b(AKIA[0-9A-Z]{16}|(?:token|secret|password|passwd|api[_-]?key)\s*[=:]\s*\S+)")
+
+
+def _redact(s):
+    """远端日志可能带环境变量/凭据，回显前脱敏（回显会进终端，也会进 agent 上下文）。"""
+    return _SECRET_RE.sub("***", s)
+
+
+def _noopt(p):
+    """给 ffmpeg 的路径加 ./ 前缀，防止以 - 开头的文件名被当成选项。"""
+    p = str(p)
+    return p if os.path.isabs(p) or p.startswith("./") else "./" + p
+
 
 MUSIC = ["Music", "Theme music", "Background music", "Musical instrument", "Singing", "Orchestra", "Soundtrack music",
          "Sad music", "Scary music", "Wedding music", "Marimba, xylophone", "Glockenspiel", "Mallet percussion",
@@ -100,24 +150,41 @@ class Cfg:
         self.neg = c.get("negative", "music, singing, modern vehicles, car engine, electronic sounds")
         self.scenes, self.fix, self.want = c["scenes"], c.get("fix", {}), c.get("want", {})
         self.events = c.get("events", [])
+        for e in self.events:                      # 名字会进文件路径和 shell，先校验
+            _safe_name(e[0], "events 里的名字")
         self.out = (base / c.get("out_dir", "sfx")).resolve()
-        self.work = Path(c.get("work_dir", "/tmp/sfx_work"))
+        self.work = (base / c.get("work_dir", "sfx_work")).resolve()
         self.rms_db, self.limit = c.get("target_rms_db", -21.0), c.get("limit", .7)
         r = c.get("remote", {})
-        self.runner = r.get("runner")               # 例 ["/path/ssm_run.sh", "{cmd}", "{timeout}"]；null = 本机
         self.comfy = r.get("comfy")                 # 例 "http://127.0.0.1:18188"；null = 本机路径
-        self.comfy_dir = r.get("comfy_dir", "/opt/ComfyUI")
-        self.mm_dir = r.get("mmaudio_dir", "/opt/mmaudio/src")
-        self.mm_py = r.get("mmaudio_python", "/opt/mmaudio/venv/bin/python")
-        self.tag_py = r.get("tagger_python", "/opt/ComfyUI/venv/bin/python")
-        self.remote_work = r.get("remote_work", "/opt/mmaudio/work")
+        if self.comfy:
+            self.comfy = _safe_url(self.comfy, "remote.comfy",
+                                   allow_remote=os.environ.get("SFX_ALLOW_REMOTE_HOST") == "1")
+        self.comfy_dir = _safe_rpath(r.get("comfy_dir", "/opt/ComfyUI"), "remote.comfy_dir")
+        self.mm_dir = _safe_rpath(r.get("mmaudio_dir", "/opt/mmaudio/src"), "remote.mmaudio_dir")
+        self.mm_py = _safe_rpath(r.get("mmaudio_python", "/opt/mmaudio/venv/bin/python"), "remote.mmaudio_python")
+        self.tag_py = _safe_rpath(r.get("tagger_python", "/opt/ComfyUI/venv/bin/python"), "remote.tagger_python")
+        self.remote_work = _safe_rpath(r.get("remote_work", "/opt/mmaudio/work"), "remote.remote_work")
+        # runner[0] 是会被执行的程序：配置等同代码，这里只做存在性检查并回显，别跑来源不明的配置
+        self.runner = r.get("runner")
+        if self.runner:
+            if not isinstance(self.runner, list) or not self.runner or not all(isinstance(x, str) for x in self.runner):
+                raise SystemExit("remote.runner 必须是字符串数组，如 [\"/path/ssm_run.sh\", \"{cmd}\", \"{timeout}\"]")
+            for x in self.runner:                 # 顺手挡住占位路径/拼错路径
+                if x.startswith("/") and not Path(x).is_file():
+                    raise SystemExit(f"remote.runner 里的路径不存在：{x}"
+                                     "（样例配置里是占位符，请改成你机器上 ssm_run.sh / ssh 的真实路径）")
+        self._runner_shown = False
 
     # ---- 远端执行与传输
     def sh(self, cmd, timeout=600):
         if not self.runner:
             return subprocess.run(["bash", "-c", cmd], check=True, capture_output=True, text=True, timeout=timeout).stdout
+        if not self._runner_shown:
+            print("[远端执行器]", " ".join(self.runner), file=sys.stderr)
+            self._runner_shown = True
         argv = [a.replace("{cmd}", cmd).replace("{timeout}", str(timeout)) for a in self.runner]
-        return subprocess.run(argv, check=True, capture_output=True, text=True).stdout
+        return subprocess.run(argv, check=True, capture_output=True, text=True, timeout=timeout + 120).stdout
 
     def in_path(self, name):
         return f"{self.comfy_dir}/input/sfx/{name}" if self.comfy else str(self.work / "in" / name)
@@ -131,9 +198,10 @@ class Cfg:
             shutil.copy(path, self.work / "in" / Path(path).name)
             return
         bnd = uuid.uuid4().hex
+        fn = Path(path).name.replace("\\", "").replace('"', "").replace("\r", "").replace("\n", "")  # 防 multipart 头注入
         parts = [f'--{bnd}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
                  for k, v in (("subfolder", "sfx"), ("type", "input"), ("overwrite", "true"))]
-        parts.append(f'--{bnd}\r\nContent-Disposition: form-data; name="image"; filename="{Path(path).name}"\r\n'
+        parts.append(f'--{bnd}\r\nContent-Disposition: form-data; name="image"; filename="{fn}"\r\n'
                      f'Content-Type: video/mp4\r\n\r\n'.encode() + Path(path).read_bytes() + b"\r\n")
         parts.append(f"--{bnd}--\r\n".encode())
         req = urllib.request.Request(f"{self.comfy}/upload/image", data=b"".join(parts),
@@ -141,41 +209,50 @@ class Cfg:
         urllib.request.urlopen(req, timeout=300).read()
 
     def get(self, rel, dst):
-        """rel：相对远端输出根目录的路径（如 w03.flac、evc/ev_bell_c2.flac）。"""
-        Path(dst).parent.mkdir(parents=True, exist_ok=True)
+        """rel：相对远端输出根目录的路径（如 w03.flac、evc/ev_bell_c2.flac）。dst 必须落在 out_dir 内。"""
+        dst = Path(dst).resolve()
+        if self.out not in dst.parents and dst.parent != self.out:
+            raise SystemExit(f"拒绝写到 out_dir 之外：{dst}")
+        if ".." in Path(rel).parts:
+            raise SystemExit(f"远端路径非法：{rel!r}")
+        dst.parent.mkdir(parents=True, exist_ok=True)
         if not self.comfy:
             shutil.copy(Path(self.out_root()) / rel, dst)
             return
         sub, fn = os.path.split(rel)
         q = urllib.parse.urlencode({"filename": fn, "subfolder": "sfx/" + sub if sub else "sfx", "type": "output"})
         with urllib.request.urlopen(f"{self.comfy}/view?{q}", timeout=300) as r:
-            Path(dst).write_bytes(r.read())
+            dst.write_bytes(r.read())
 
     def free_comfy_vram(self):
         if self.comfy:            # ComfyUI 常驻会占着显存；跑 MMAudio 前先让它卸载模型
+            port = urllib.parse.urlparse(self.comfy).port or 8188
             self.sh("curl -s -X POST -H 'Content-Type: application/json' "
-                    "-d '{\"unload_models\":true,\"free_memory\":true}' http://127.0.0.1:8188/free || true", 60)
+                    f"-d '{{\"unload_models\":true,\"free_memory\":true}}' http://127.0.0.1:{int(port)}/free || true", 60)
 
     def batch(self, jobs, clear_sub=None):
         self.free_comfy_vram()
-        rw = self.remote_work
-        clear = f"rm -rf {self.out_root()}/{clear_sub}; " if clear_sub else ""
-        cmd = (f"mkdir -p {rw} {self.out_root()}; {clear}"
-               f"cat > {rw}/jobs.json <<'JEOF'\n{json.dumps(jobs, ensure_ascii=False)}\nJEOF\n"
-               f"cat > {rw}/batch.py <<'PYEOF'\n{SERVER}\nPYEOF\n"
-               f"{self.mm_py} {rw}/batch.py {self.mm_dir} {rw}/jobs.json {self.out_root()} > {rw}/batch.log 2>&1; "
-               f"tail -3 {rw}/batch.log")
+        rw, root = self.remote_work, self.out_root()
+        clear = f"rm -rf {shlex.quote(root + '/' + _safe_name(clear_sub, 'clear_sub'))}; " if clear_sub else ""
+        cmd = (f"set -u; mkdir -p {shlex.quote(rw)} {shlex.quote(root)}; {clear}"
+               f"cat > {shlex.quote(rw + '/jobs.json')} <<'JEOF'\n{json.dumps(jobs, ensure_ascii=False)}\nJEOF\n"
+               f"cat > {shlex.quote(rw + '/batch.py')} <<'PYEOF'\n{SERVER}\nPYEOF\n"
+               f"{shlex.quote(self.mm_py)} {shlex.quote(rw + '/batch.py')} {shlex.quote(self.mm_dir)} "
+               f"{shlex.quote(rw + '/jobs.json')} {shlex.quote(root)} > {shlex.quote(rw + '/batch.log')} 2>&1; "
+               f"tail -3 {shlex.quote(rw + '/batch.log')}")
         out = self.sh(cmd, 3600)
         if "ALL_DONE" not in out:
-            raise SystemExit("MMAudio 批处理失败：\n" + out)
+            raise SystemExit("MMAudio 批处理失败（远端日志末尾，可能含路径信息）：\n" + _redact(out))
         return out
 
     def tags(self, pattern):
         rw = self.remote_work
-        cmd = (f"mkdir -p {rw}; cat > {rw}/tag.py <<'PYEOF'\n{TAGGER}\nPYEOF\n"
-               f"{self.tag_py} {rw}/tag.py '{self.out_root()}/{pattern}' 2>/dev/null")
+        cmd = (f"set -u; mkdir -p {shlex.quote(rw)}; cat > {shlex.quote(rw + '/tag.py')} <<'PYEOF'\n{TAGGER}\nPYEOF\n"
+               f"{shlex.quote(self.tag_py)} {shlex.quote(rw + '/tag.py')} "
+               f"{shlex.quote(self.out_root() + '/' + pattern)} 2>/dev/null")
         out = self.sh(cmd, 1800)
         return json.loads(out[out.index("JSON") + 4:].splitlines()[0])
+
 
     # ---- 时间窗
     def scene_at(self, t):
@@ -204,7 +281,7 @@ def ffmpeg():
 
 
 def cut_clip(c, t0, dur, dst):
-    subprocess.run([ffmpeg(), "-y", "-loglevel", "error", "-ss", f"{t0:.3f}", "-t", f"{dur:.3f}", "-i", str(c.video),
+    subprocess.run([ffmpeg(), "-y", "-loglevel", "error", "-ss", f"{t0:.3f}", "-t", f"{dur:.3f}", "-i", _noopt(c.video),
                     "-vf", "scale=640:360", "-an", "-c:v", "libx264", "-crf", "20", "-preset", "fast", str(dst)], check=True)
 
 
@@ -226,7 +303,8 @@ def cmd_cut(c):
 
 
 def cmd_run(c, names=None):
-    jobs = [dict(name=w["name"], video=c.in_path(w["name"] + ".mp4"), dur=c.win, prompt=w["prompt"], neg=c.neg,
+    jobs = [dict(name=w["name"], video=c.in_path(w["name"] + ".mp4"), dur=min(c.win, c.dur - w["t0"]),
+                 prompt=w["prompt"], neg=c.neg,
                  seed=20260930 + w["i"] + 1000 * w["seed"], steps=30, cfg=5.5 if w["gain"] >= 3 else 4.5)
             for w in c.windows() if not names or w["name"] in names]
     print(c.batch(jobs).strip().splitlines()[-1])
@@ -265,7 +343,8 @@ def cmd_search(c, names, k=6):
         cands = sorted(((score(tags.get(f"{nm}_c{j}", {}), c.want.get(nm, []), MUSIC), j) for j in range(k)), reverse=True)
         best = cands[0][1]
         print(nm, "选 c%d 分 %.2f" % (best, cands[0][0]), list(tags.get(f"{nm}_c{best}", {}).items())[:4])
-        c.sh(f"cp {c.out_root()}/cand/{nm}_c{best}.flac {c.out_root()}/{nm}.flac", 60)
+        c.sh("cp " + shlex.quote(f"{c.out_root()}/cand/{nm}_c{best}.flac")
+             + " " + shlex.quote(f"{c.out_root()}/{nm}.flac"), 60)
 
 
 def cmd_events(c, names=None, k=6):
@@ -295,7 +374,7 @@ def cmd_fetch(c):
 
 
 def decode(path, sr):
-    raw = subprocess.run([ffmpeg(), "-loglevel", "error", "-i", str(path), "-f", "f32le", "-ac", "1", "-ar", str(sr), "-"],
+    raw = subprocess.run([ffmpeg(), "-loglevel", "error", "-i", _noopt(path), "-f", "f32le", "-ac", "1", "-ar", str(sr), "-"],
                          check=True, capture_output=True).stdout
     return np.frombuffer(raw, np.float32).astype(np.float64)
 
@@ -339,10 +418,10 @@ def cmd_mix(c):
     subprocess.run([ffmpeg(), "-y", "-loglevel", "error", "-f", "f32le", "-ar", str(sr), "-ac", "1", "-i", "-",
                     "-af", f"alimiter=limit={c.limit}:attack=5:release=80:level=0,pan=stereo|c0=c0|c1=c0",
                     "-ar", str(sr), "-c:a", "pcm_s16le", str(wav)], input=acc.astype(np.float32).tobytes(), check=True)
-    subprocess.run([ffmpeg(), "-y", "-loglevel", "error", "-i", str(c.video), "-i", str(wav), "-map", "0:v", "-map", "1:a",
+    subprocess.run([ffmpeg(), "-y", "-loglevel", "error", "-i", _noopt(c.video), "-i", _noopt(wav), "-map", "0:v", "-map", "1:a",
                     "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-shortest", "-movflags", "+faststart",
                     str(c.out_video)], check=True)
-    r = subprocess.run([ffmpeg(), "-hide_banner", "-i", str(c.out_video), "-vn", "-af", "ebur128=peak=true:framelog=quiet",
+    r = subprocess.run([ffmpeg(), "-hide_banner", "-i", _noopt(c.out_video), "-vn", "-af", "ebur128=peak=true:framelog=quiet",
                         "-f", "null", "-"], capture_output=True, text=True).stderr
     lines = [ln.strip() for ln in r.splitlines() if ln.strip().startswith(("I:", "Peak:"))]
     print("并入 →", c.out_video, " ".join(lines[:2]))

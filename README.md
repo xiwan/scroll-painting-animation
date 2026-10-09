@@ -131,17 +131,53 @@ git clone https://github.com/xiwan/scroll-painting-animation.git \
 ```bash
 python -m pip install numpy pillow imageio-ffmpeg       # 系统自带的 python3 通常没有 numpy
 
-python scripts/scroll_demo.py stats                     # 看功能团与选图是否合理
-python scripts/scroll_demo.py preview 2 7.6 10 12.6 --out /tmp/demo   # 白天 / 入夜 / 夜 / 黎明 各一帧
-python scripts/scroll_demo.py render --out /tmp/demo.mp4              # 14 秒小样（约 10 秒出完）
-python scripts/popcheck.py /tmp/demo.mp4 --skip 20                    # 跳帧检查
+python scripts/scroll_demo.py stats                     # 看功能团与选图是否合理（不需要字体）
+python scripts/scroll_demo.py preview 2 7.6 10 12.6 --out demo_frames   # 白天 / 入夜 / 夜 / 黎明 各一帧
+python scripts/scroll_demo.py render --out demo.mp4                     # 14 秒小样（约 10 秒出完）
+python scripts/popcheck.py demo.mp4 --skip 20                           # 跳帧检查，应为 0 离群
 ```
 
 `scroll_demo.py` 不需要任何图片素材就能跑通，所有层（底图、精灵、行人、船、题字、昼夜、发光）都在里面，
 新项目从它开始、按 `engine.md` 的层次逐步替换。
 
-依赖：Python 3.10+、numpy、Pillow、imageio-ffmpeg；中文字体（macOS 自带楷体，Linux 装 Noto CJK）。
-GPU 部分（ComfyUI 出精灵、MMAudio 出音效）在远端机器上跑，见 `infra.md`。
+依赖：Python 3.10+、numpy、Pillow、imageio-ffmpeg；**出画面还需要一个 CJK 字体**——
+macOS 自带楷体，Windows 自带 simkai，Linux 要装（`apt install fonts-noto-cjk` /
+`dnf install google-noto-sans-cjk-fonts`），也可以用 `SCROLLKIT_FONT=/path/to/font.ttf` 指定。
+GPU 部分（ComfyUI 出精灵、MMAudio 出音效）在远端机器上跑，见 `infra.md`；第 3–7、9 步纯本机，不需要 GPU。
+
+## 安全须知
+
+这个 skill 会让 agent 在 GPU 机上执行命令、读外部 JSON 配置、跑 ComfyUI 工作流。四条硬规则：
+
+1. **配置文件和 workflow JSON 等同代码**。`sfx_config.json` 的 `remote.*` 路径会进远端 shell，
+   ComfyUI 的 `/prompt` 默认无鉴权、工作流能加载任意权重和自定义节点。脚本对配置做了白名单校验
+   （远端路径必须绝对、无空格、无 shell 元字符、至少两级；事件名只许 `[A-Za-z0-9_-]`；
+   拉回的文件必须落在 `out_dir` 内），但**不要跑来源不明的配置或工作流**。
+2. **`ssm_run.sh` 在远端以 root 执行任意命令**（AWS SSM `AWS-RunShellScript`）。执行前会回显调用者身份
+   和命令并要求确认；被脚本/agent 非交互调用时必须显式 `SSM_RUN_YES=1`，否则拒绝执行。
+   GPU 机当一次性实例用：最小权限 instance profile、不放长期凭据、用完就停。
+3. **远端输出会进 agent 上下文**。不要在远端跑会回显凭据的命令；脚本回显远端日志时会对
+   `AKIA…`/`token=`/`secret=` 做脱敏，但别指望它兜住一切。
+4. **网络目标默认只允许回环地址**。`comfy_client.py --host` 和 `remote.comfy` 指向非本机地址时直接拒绝
+   （本地文件、成片片段会被上传过去）；跨机请用 SSM/SSH 端口转发，确实要直连才设
+   `COMFY_ALLOW_REMOTE_HOST=1` / `SFX_ALLOW_REMOTE_HOST=1`。
+
+本仓库不含模型权重、素材库和成片，也不会把你的代码或数据发往第三方。
+
+## 换题材要注意什么
+
+方法论（九步、门槛、时间轴表）是通用的；`scrollkit` 里有几处是为中式题材写的，换题材要动：
+
+| 情况 | 要改什么 |
+|---|---|
+| 片长不是 180 秒 | `DayNight` 默认是**绝对秒数**，做短片不传参会永远不入夜 → 用 `DayNight.for_duration(总秒数)` |
+| 镜头速度不是 85.7 单位/秒 | `DistrictField(edge=420, warp=260)`、`SpritePicker(rep_r=360)` 要按秒换算（`edge ≈ 4 × speed / cos30`） |
+| 非中式光源 | `lantern_mask` 的颜色判据默认认红灯笼 → 传 `color=LAMP_WARM`（火把/壁灯）或 `LAMP_WHITE`（路灯/窗光） |
+| 非中文题字 | `InkItem.row()` 横排代替 `column()`；`draw_seal`（朱文方印）整体换掉 |
+| 山水长卷、室内叙事 | **引擎没有地形也没有墙体剖切**，这是重写级工作，不是改配置 |
+
+详见 [source-analysis.md §5](references/source-analysis.md)（迁移清单）。字体在非 macOS 平台的坑见
+[text.md §0](references/text.md)：找不到 CJK 字体会直接报错，不会静默把题诗画成空白。
 
 ## 仓库结构
 

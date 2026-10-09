@@ -4,7 +4,7 @@
 内置一个"文生图 + BiRefNet 抠图"的 API 格式工作流模板（Z-Image Turbo 9 步），模型文件名可用参数换；
 也可以 --workflow 传任何 API 格式的 JSON，用 --set 节点.inputs.键=值 改参数。
 
-用法（--host 默认 http://127.0.0.1:8188；远端机器常用端口转发到本机 18188）:
+用法（--host 默认 http://127.0.0.1:18188，即 infra.md 里 SSM 隧道的本机端口；ComfyUI 就在本机时用 :8188）:
   python comfy_client.py t2i --name bld_teahouse --w 1024 --h 1024 --seed 7 --prompt "..."     # 排队
   python comfy_client.py wait                                                                # 等队列清空
   python comfy_client.py sprite --name bld_teahouse --out cut/ --max 720                     # 拉回 RGB+蒙版 → 透明精灵
@@ -18,12 +18,52 @@ import argparse
 import io
 import json
 import os
+import re
+import sys
 import time
 import urllib.parse
 import urllib.request
 import uuid
 
 from PIL import Image, ImageFilter
+
+Image.MAX_IMAGE_PIXELS = 80_000_000          # 挡住恶意超大图（解压炸弹）打爆内存
+_NAME_RE = re.compile(r"[A-Za-z0-9_-]{1,64}\Z")
+
+
+def safe_name(v):
+    """--name 会进本地文件路径和服务端 filename_prefix，不许路径穿越。"""
+    if not v or not _NAME_RE.match(v):
+        raise SystemExit(f"--name 非法：{v!r}（只允许字母数字 _ - ，1–64 字符）")
+    return v
+
+
+def safe_host(v):
+    """只允许 http/https；默认只允许回环地址——upload 会把本地文件发给它，跨机须显式放开。"""
+    u = urllib.parse.urlparse(v)
+    if u.scheme not in ("http", "https"):
+        raise SystemExit(f"--host 只允许 http/https：{v!r}")
+    host = (u.hostname or "").lower()
+    local = host in ("127.0.0.1", "::1", "localhost") or host.startswith("127.")
+    if not local and os.environ.get("COMFY_ALLOW_REMOTE_HOST") != "1":
+        raise SystemExit(f"--host 指向非本机地址 {host}；本地文件会被上传到该地址。确认无误后设 "
+                         "COMFY_ALLOW_REMOTE_HOST=1（建议改用 SSM/SSH 端口转发到 127.0.0.1）")
+    return v.rstrip("/")
+
+
+def safe_out(out, name):
+    """输出必须落在 --out 目录内。"""
+    d = os.path.realpath(out)
+    p = os.path.realpath(os.path.join(d, f"{name}.png"))
+    if os.path.dirname(p) != d:
+        raise SystemExit(f"拒绝写到 --out 之外：{p}")
+    return p
+
+
+def _mp_name(path):
+    """multipart 头里的文件名：去掉引号与换行，防 header 注入。"""
+    n = os.path.basename(path)
+    return n.replace("\\", "").replace('"', "").replace("\r", "").replace("\n", "")
 
 
 def post(host, path, obj):
@@ -53,7 +93,7 @@ def upload(host, path, sub="", overwrite=True):
     bnd = uuid.uuid4().hex
     parts = [f'--{bnd}\r\nContent-Disposition: form-data; name="{k}"\r\n\r\n{v}\r\n'.encode()
              for k, v in (("subfolder", sub), ("type", "input"), ("overwrite", "true" if overwrite else "false"))]
-    parts.append(f'--{bnd}\r\nContent-Disposition: form-data; name="image"; filename="{os.path.basename(path)}"\r\n'
+    parts.append(f'--{bnd}\r\nContent-Disposition: form-data; name="image"; filename="{_mp_name(path)}"\r\n'
                  f'Content-Type: application/octet-stream\r\n\r\n'.encode() + open(path, "rb").read() + b"\r\n")
     parts.append(f"--{bnd}--\r\n".encode())
     req = urllib.request.Request(host + "/upload/image", data=b"".join(parts),
@@ -149,7 +189,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["t2i", "run", "wait", "sprite", "upload", "free"])
     ap.add_argument("args", nargs="*")
-    ap.add_argument("--host", default=os.environ.get("COMFY_HOST", "http://127.0.0.1:8188"))
+    ap.add_argument("--host", default=os.environ.get("COMFY_HOST", "http://127.0.0.1:18188"),
+                    help="默认 http://127.0.0.1:18188（infra.md 里 SSM 隧道的本机端口）；"
+                         "ComfyUI 就在本机时用 --host http://127.0.0.1:8188")
     ap.add_argument("--name")
     ap.add_argument("--prompt")
     ap.add_argument("--w", type=int, default=1024)
@@ -162,9 +204,14 @@ def main():
     ap.add_argument("--height", type=int)
     ap.add_argument("--sub", default="")
     a = ap.parse_args()
+    a.host = safe_host(a.host)
+    if a.cmd in ("t2i", "sprite"):
+        safe_name(a.name)
     if a.cmd == "t2i":
         print(post(a.host, "/prompt", {"prompt": t2i_workflow(a.prompt, a.w, a.h, a.seed, a.name)}))
     elif a.cmd == "run":
+        # workflow JSON 等同代码：ComfyUI 的 /prompt 默认无鉴权，工作流能加载任意权重和自定义节点。
+        print("[提醒] 只跑自己写的或审阅过的 workflow JSON", file=sys.stderr)
         wf = json.load(open(a.workflow))
         for s in a.set:
             path, val = s.split("=", 1)
@@ -191,7 +238,7 @@ def main():
         mask = Image.open(io.BytesIO(view(a.host, m[0], m[1])))
         im = compose_sprite(rgb, mask, a.max, a.height)
         os.makedirs(a.out, exist_ok=True)
-        p = os.path.join(a.out, f"{a.name}.png")
+        p = safe_out(a.out, a.name)
         im.save(p)
         print(p, im.size)
     elif a.cmd == "upload":

@@ -250,11 +250,13 @@
   ]
  ],
  "out_dir": "sfx",
- "work_dir": "/tmp/sfx_work",
+ "work_dir": "sfx_work",
  "target_rms_db": -21.0,
  "limit": 0.7,
  "remote": {
   "runner": [
+   "/usr/bin/env",
+   "SSM_RUN_YES=1",
    "/path/to/skill/scripts/ssm_run.sh",
    "{cmd}",
    "{timeout}"

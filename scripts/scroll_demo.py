@@ -326,15 +326,18 @@ class Walkers:
 G = {}
 
 
-def setup():
+def setup(need_font=True):
     t0 = time.time()
     sc = Scene()
     sc.build()
-    fonts = K.FontBank()
+    fonts = K.FontBank(required=need_font)   # 没有 CJK 字体时：出画面会报错并给出装字体的办法，stats 仍可跑
     G.update(sc=sc, ground=bake_ground(sc), walkers=Walkers(sc), fonts=fonts)
     G["overlay"], G["prot"], G["ink"] = build_overlay(fonts)
     G["E"], G["EB"] = build_emissive(sc)
-    print(f"setup {time.time() - t0:.1f}s：精灵 {len(sc.spr)}，地块 {len(sc.lots)}，字体 {fonts.path_idx}", flush=True)
+    # SKILL.md 第 3 步的门槛：setup 要打印各层数量，便于"改了布局后某样东西消失"时一眼看出
+    print(f"setup {time.time() - t0:.1f}s：精灵 {len(sc.spr)}，地块 {len(sc.lots)}，"
+          f"街段 {max(0, len(sc.road) - 1)}，行人 {len(G['walkers'].w)}，"
+          f"题签 {len(sc.labels)}，题字 {len(G['ink'])}，字体 {G['fonts'].path_idx}", flush=True)
 
 
 def render_frame(fi):
@@ -377,9 +380,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=["preview", "render", "stats"])
     ap.add_argument("secs", nargs="*", type=float)
-    ap.add_argument("--out", default="/tmp/scroll_demo")
+    ap.add_argument("--out", help="preview: 帧输出目录（默认 demo_frames/）；render: mp4 路径（默认 demo.mp4）")
     a = ap.parse_args()
-    setup()
+    a.out = a.out or ("demo.mp4" if a.cmd == "render" else "demo_frames")
+    setup(need_font=a.cmd != "stats")
     sc = G["sc"]
     if a.cmd == "stats":
         per = {}
@@ -400,7 +404,7 @@ def main():
         return
     import imageio_ffmpeg
     cmd = [imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
-           "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", a.out]
+           "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-c:v", "libx264", "-crf", "17", "-pix_fmt", "yuv420p", a.out]
     import subprocess
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     t0 = time.time()

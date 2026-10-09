@@ -18,9 +18,12 @@ v = gx + gy 与屏幕 y 成正比（纵深）。
 from __future__ import annotations
 
 import glob
+import json
 import math
 import os
 import random
+import subprocess
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -103,7 +106,8 @@ class DistrictField:
         """网格点 g 属于各团的权重（和为 1）。"""
         uw = self._uw(g)
         out = {}
-        for name, a, b in self.districts:
+        for d in self.districts:
+            name, a, b = d[0], d[1], d[2]          # 允许第 4 项是注释（见 assets/districts.*.json）
             w = smoothstep((uw - a) / self.edge + .5) * smoothstep((b - uw) / self.edge + .5)
             if w > 1e-3:
                 out[name] = w
@@ -125,6 +129,45 @@ class DistrictField:
             for k, p in profiles.get(d, {}).get(key, {}).items():
                 out[k] = out.get(k, 0.0) + m * p
         return out
+
+
+def load_district_config(src, clamps=None):
+    """读 `assets/districts.*.json`（或已 load 好的 dict），拼出布局要用的几样东西。
+
+    返回 dict：`field`（DistrictField）、`profiles`、`groups`、`kinds`、`aff`，以及原样带回的其余键。
+    约定与注意：
+      - `districts` 每项是 `[团名, u起, u止]`，第 4 项若存在当注释忽略；
+      - `edge_u` → `DistrictField.edge`，`warp_u` → `warp`（没有就用默认）；
+      - **硬边界（城墙那类）无法写进 JSON**（需要一个谓词函数），由调用方传
+        `clamps=[(lambda g: g[0] > WALL_GX, 12750, 1e9), ...]`；JSON 里的 `wall_clamp_说明` 只是文字说明。
+      - `landmarks_timeline_说明`、`lay_probs_mansion_court` 是给人读的参考，scrollkit 不消费。
+
+    用法：
+        cfg = load_district_config("assets/districts.qingming.json",
+                                   clamps=[(lambda g: g[0] > 9000, 12750, 1e18),
+                                           (lambda g: g[0] <= 9000, -1e18, 12250)])
+        field = cfg["field"]
+        picker = SpritePicker(cfg["groups"], cfg["kinds"], cfg["aff"], has=my_has)
+    """
+    if isinstance(src, (str, os.PathLike)):
+        with open(src, encoding="utf-8") as f:
+            src = json.load(f)
+    d = dict(src)
+    districts = [(x[0], float(x[1]), float(x[2])) for x in d.pop("districts")]
+    kw = {}
+    if "edge_u" in d:
+        kw["edge"] = float(d.pop("edge_u"))
+    if "warp_u" in d:
+        kw["warp"] = float(d.pop("warp_u"))
+    groups = d.pop("groups", {})
+    kinds = {g: set(v) for g, v in d.pop("group_kinds", {}).items()}
+    aff = d.pop("affinity", {})
+    profiles = d.pop("profiles", {})
+    missing = [g for g in groups if g not in kinds]
+    if missing:
+        raise ValueError(f"group_kinds 缺这些用途组：{missing}")
+    return dict(field=DistrictField(districts, clamps=list(clamps or []), **kw),
+                profiles=profiles, groups=groups, kinds=kinds, aff=aff, rest=d)
 
 
 # ------------------------------------------------------------------ 选图
@@ -214,25 +257,57 @@ class SpritePicker:
 
 # ------------------------------------------------------------------ 字体
 def find_cjk_font(prefer=("Kaiti", "STKaiti", "Songti", "Libian", "Hiragino Sans GB", "STHeiti", "Noto Serif CJK",
-                          "Noto Sans CJK", "SourceHanSerif", "WenQuanYi")):
-    """找一个能写中文的字体文件，返回 (路径, ttc 索引) 或 None。macOS 的楷体/隶书在 AssetsV2 里。"""
-    roots = ["/System/Library/AssetsV2/com_apple_MobileAsset_Font*/*/AssetData", "/System/Library/Fonts",
-             "/Library/Fonts", os.path.expanduser("~/Library/Fonts"), "/usr/share/fonts/**", "/usr/local/share/fonts/**"]
+                          "Noto Sans CJK", "SourceHanSerif", "SourceHanSans", "WenQuanYi", "simkai", "simsun",
+                          "msyh", "msjh", "Arial Unicode")):
+    """找一个能写 CJK 的字体文件，返回 (路径, ttc 索引) 或 None。
+
+    查找顺序：环境变量 SCROLLKIT_FONT（路径，可带 `:索引`）→ 各平台字体目录 → fc-match。
+    macOS 的楷体/隶书在 AssetsV2 里；Linux 建议装 Noto CJK（Debian/Ubuntu: fonts-noto-cjk，
+    Fedora: google-noto-sans-cjk-fonts）；Windows 用自带的 simkai/msyh。
+    """
+    env = os.environ.get("SCROLLKIT_FONT")
+    if env:
+        path, _, idx = env.rpartition(":")
+        if path and idx.isdigit():
+            return path, int(idx)
+        return env, 0
+    roots = ["/System/Library/AssetsV2/com_apple_MobileAsset_Font*/*/AssetData",   # macOS
+             "/System/Library/Fonts", "/Library/Fonts", os.path.expanduser("~/Library/Fonts"),
+             "/usr/share/fonts/**", "/usr/local/share/fonts/**",                   # Linux
+             os.path.expanduser("~/.local/share/fonts/**"), os.path.expanduser("~/.fonts/**"),
+             os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts"),        # Windows
+             os.path.expanduser(r"~\AppData\Local\Microsoft\Windows\Fonts")]
     files = []
     for r in roots:
-        files += glob.glob(os.path.join(r, "*.tt[cf]"), recursive=True) + glob.glob(os.path.join(r, "*.otf"), recursive=True)
+        for ext in ("*.tt[cf]", "*.otf", "*.otc"):
+            files += glob.glob(os.path.join(r, ext), recursive=True)
     for key in prefer:
         for f in files:
             if key.lower().replace(" ", "") in os.path.basename(f).lower().replace(" ", ""):
                 return f, 0
+    try:                                     # 最后问一下 fontconfig（Linux 上最可靠）
+        out = subprocess.run(["fc-match", "-f", "%{file}", ":lang=zh"],
+                             capture_output=True, text=True, timeout=10).stdout.strip()
+        if out and os.path.isfile(out):
+            return out, 0
+    except (OSError, subprocess.SubprocessError):
+        pass
     return None
 
 
 class FontBank:
     """按 (字体, 像素大小) 缓存 ImageFont。"""
 
-    def __init__(self, path_idx=None):
+    def __init__(self, path_idx=None, required=True):
         self.path_idx = path_idx or find_cjk_font()
+        if not self.path_idx:
+            msg = ("找不到任何 CJK 字体，题诗/题签会画成空白或豆腐块。请装一个中文字体"
+                   "（Debian/Ubuntu: apt install fonts-noto-cjk；Fedora: google-noto-sans-cjk-fonts；"
+                   "macOS 自带楷体；Windows 自带 simkai），或用 SCROLLKIT_FONT=/path/to/font.ttf 指定。"
+                   " 只画无字画面可以传 FontBank(required=False) 跳过。")
+            if required:
+                raise RuntimeError(msg)
+            warnings.warn(msg, stacklevel=2)
         self._c = {}
 
     def get(self, px):
@@ -247,7 +322,9 @@ class FontBank:
 
 # ------------------------------------------------------------------ 印章
 def draw_seal(d: ImageDraw.ImageDraw, x, y, size, text, fonts: FontBank, R=1.0):
-    """朱文方印：红底、白字、内框，边上几处细缺口。x, y, size 为世界单位，d 画在内部像素上。"""
+    """朱文方印：红底、白字、内框，边上几处细缺口。x, y, size 为世界单位，d 画在内部像素上。
+    这是中式题款专有的零件——非中国题材应整体换掉（纹章、蜡封、签名），不要只换字。
+    文字分支只处理 1/2/4 个字（四字右起两行）。"""
     rr = random.Random(sum(map(ord, text)))
     X, Y, S = x * R, y * R, size * R
     red = (172, 42, 32, 232)
@@ -271,7 +348,10 @@ def draw_seal(d: ImageDraw.ImageDraw, x, y, size, text, fonts: FontBank, R=1.0):
 # ------------------------------------------------------------------ 题字逐字显现
 class InkItem:
     """一块题字（诗、小题、题跋）：画在自己的小图层上，记下每个字、每方印的位置和先后，供逐字显现。
-    坐标为世界单位；R 为内部像素/世界单位。t0 开始写的时刻，speed 每秒写几个字。"""
+    坐标为世界单位；R 为内部像素/世界单位。t0 开始写的时刻，speed 每秒写几个字。
+
+    `text()` 按字形实测包围盒记录逐字蒙版，所以等宽方块汉字和宽度不等的拉丁字母都对得上；
+    但 `column()` 是竖排（右起、自上而下）的中式版式，横排题材请改用 `row()`。"""
 
     def __init__(self, x0, y0, x1, y1, t0, speed, fonts: FontBank, R=1.0):
         self.x0, self.y0, self.R, self.fonts = float(x0), float(y0), R, fonts
@@ -284,13 +364,30 @@ class InkItem:
         """在世界坐标 (x, y)（字的顶边中点）写一个字。按调用顺序就是书写顺序（竖排：右起、自上而下）。"""
         R = self.R
         X, Y = (x - self.x0) * R, (y - self.y0) * R
-        self.d.text((X, Y), ch, font=self.fonts.get(size * R), fill=fill, anchor="mt")
-        self.glyphs.append((int(X - size * .56 * R), int(Y - size * .1 * R), int(X + size * .56 * R), int(Y + size * 1.12 * R)))
+        f = self.fonts.get(size * R)
+        self.d.text((X, Y), ch, font=f, fill=fill, anchor="mt")
+        try:                                  # 实测字形框：拉丁字母宽度不等，不能按方块字估
+            bx0, by0, bx1, by1 = self.d.textbbox((X, Y), ch, font=f, anchor="mt")
+            pad = size * R * .08
+            self.glyphs.append((int(bx0 - pad), int(by0 - pad), int(bx1 + pad), int(by1 + pad)))
+        except (AttributeError, ValueError):  # 老版本 Pillow / 位图字体：退回方块字估算
+            self.glyphs.append((int(X - size * .56 * R), int(Y - size * .1 * R),
+                                int(X + size * .56 * R), int(Y + size * 1.12 * R)))
 
     def column(self, x, y, text, size, step=None, fill=(52, 44, 38, 245)):
+        """竖排一列（自上而下）。多列请从右往左依次调用，这就是中式题诗的书写顺序。"""
         step = step or size * 1.17
         for i, ch in enumerate(text):
             self.text(x, y + i * step, ch, size, fill)
+
+    def row(self, x, y, text, size, step=None, fill=(52, 44, 38, 245)):
+        """横排一行（自左向右），按实际字宽推进——非中文题材用这个代替 column。"""
+        f = self.fonts.get(size * self.R)
+        cx = x
+        for ch in text:
+            self.text(cx, y, ch, size, fill)
+            adv = step * self.R if step else (f.getlength(ch) if hasattr(f, "getlength") else size * self.R)
+            cx += adv / self.R
 
     def seal(self, x, y, size, text):
         R = self.R
@@ -400,12 +497,23 @@ def presence_1d(w, cell, seed, thr=.56, soft=.16):
 # ------------------------------------------------------------------ 昼夜晨昏
 @dataclass
 class DayNight:
-    """dusk=(开始, 全黑)，dawn=(开始, 天亮)（秒）。night(t) 0..1，dawn_glow(t) 黎明暖色强度 0..1。"""
+    """dusk=(开始, 全黑)，dawn=(开始, 天亮)（秒）。night(t) 0..1，dawn_glow(t) 黎明暖色强度 0..1。
+
+    默认值是《清明上河图》180 秒片的时刻（约 65%/74% 处入夜、87%/96% 处转黎明）。
+    换片长别照抄——用 `DayNight.for_duration(总秒数)` 按比例生成，或直接传绝对秒数。
+    """
     dusk: tuple = (117.0, 134.0)
     dawn: tuple = (157.0, 173.0)
     tint: tuple = (.27, .31, .50)          # 夜色：乘到去饱和后的画面上
     warm: tuple = (1.10, .95, .84)         # 黎明暖色
     mist_tint: tuple = (.42, .46, .60)     # 夜里云气的颜色系数
+
+    @classmethod
+    def for_duration(cls, dur, dusk=(.65, .745), dawn=(.872, .961), **kw):
+        """按片长比例放置昼夜：默认比例取自《清》180 秒片。dur<=0 时退回默认绝对秒数。"""
+        if dur and dur > 0:
+            return cls(dusk=(dur * dusk[0], dur * dusk[1]), dawn=(dur * dawn[0], dur * dawn[1]), **kw)
+        return cls(**kw)
 
     def night(self, t):
         a, b = self.dusk
@@ -448,12 +556,21 @@ class DayNight:
 
 
 # ------------------------------------------------------------------ 灯笼与光斑
-def lantern_mask(im: Image.Image, R=1.0, max_units=13.0):
-    """精灵里的灯笼像素（红橙、饱和、够亮）。逐个连通块筛：只留大致圆/椭圆、面积不大的小团——
-    细长的（红柱、栏杆）和大片的（红墙、大殿）都剔掉，否则夜里会像霓虹灯。返回 L 模式蒙版。"""
+#: 发光物体的颜色判据：(亮度下限, g/r 上限, b/r 上限, r-b 下限)。默认是中式红灯笼。
+#: 换题材要换这组数：欧洲壁灯/火把偏暖黄 → LAMP_WARM；现代路灯/窗光近白 → LAMP_WHITE。
+LANTERN_RED = (150, .60, .50, 90)
+LAMP_WARM = (170, .95, .70, 40)
+LAMP_WHITE = (205, 1.15, 1.15, -40)
+
+
+def lantern_mask(im: Image.Image, R=1.0, max_units=13.0, color=LANTERN_RED):
+    """精灵里的发光体像素（默认红橙灯笼：红橙、饱和、够亮）。逐个连通块筛：只留大致圆/椭圆、面积不大的小团——
+    细长的（红柱、栏杆）和大片的（红墙、大殿）都剔掉，否则夜里会像霓虹灯。返回 L 模式蒙版。
+    换题材时传 color=LAMP_WARM / LAMP_WHITE 或自定四元组，详见 references/lighting.md。"""
+    lo, gk, bk, rb = color
     a = np.asarray(im.convert("RGBA"), np.float32)
     r, g, b, al = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
-    m = (al > 180) & (r > 150) & (g < r * .6) & (b < r * .5) & (r - b > 90)
+    m = (al > 180) & (r > lo) & (g < r * gk) & (b < r * bk) & (r - b > rb)
     m = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))) > 0
     keep = np.zeros_like(m)
     seen = np.zeros_like(m)

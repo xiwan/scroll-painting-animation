@@ -2,6 +2,17 @@
 
 工具：`scripts/sfx_mmaudio.py` + 一个 JSON 配置（`assets/sfx_config.example.json` 是《清》实际用过的）。
 
+## 0. 前提与安全
+
+- **这一步要先有成片**：`cut` 是从 `config.video` 里切片段的，所以第 8 步必须排在出片之后
+  （SKILL.md 把它列在第 8、验收列第 9，实际顺序是"出片 → 配音效 → 一起验收"）。
+- 配置里必填 `video`、`duration`、`scenes`，缺一个就直接报 KeyError。
+- ⚠ **配置文件等同代码**：`remote.*` 里的路径会进远端 shell，`remote.runner[0]` 是会被执行的程序。
+  脚本对这些字段做了白名单校验（绝对路径、无空格、无 shell 元字符、至少两级），但**不要跑来源不明的配置**。
+- `remote.comfy` 默认只允许回环地址——片段会上传到那个地址。跨机访问请用端口转发；
+  确实要直连非本机地址时设 `SFX_ALLOW_REMOTE_HOST=1`。
+- `runner` 被脚本非交互调用时，`ssm_run.sh` 需要 `SSM_RUN_YES=1` 才不弹确认，写法见样例配置。
+
 ## 1. 选型
 
 - 要的是**环境声和场景音效**，不是配乐。歌曲生成模型（YuE 之类）不适合。
@@ -15,14 +26,27 @@
 mkdir -p /opt/mmaudio && cd /opt/mmaudio
 git clone --depth 1 https://github.com/hkchengrex/MMAudio.git src
 python3 -m venv venv && venv/bin/pip install -U pip
+# torch 版本/CUDA 轮子按你的驱动选，下面是实测过的一组（CUDA 12.1）；
+# 新卡（CUDA 12.4+）或 ROCm/CPU 请去 https://pytorch.org/get-started/locally/ 取对应命令，
+# 装错组合的典型症状是 "no kernel image is available for execution on the device"。
 venv/bin/pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
-cd src && ../venv/bin/pip install -e .     # 首次运行会自动下载权重（large_44k_v2 + 外部权重）
+cd src && ../venv/bin/pip install -e .     # 首次运行会自动联网下载权重（large_44k_v2，约数 GB）
 ```
+
+- 安装路径和配置键的对应（换目录要同步改这几个）：
+
+  | 装在哪 | 配置键 |
+  |---|---|
+  | MMAudio 源码目录 | `remote.mmaudio_dir` |
+  | MMAudio venv 的 python | `remote.mmaudio_python` |
+  | ComfyUI 根目录（切片上传与输出都在它的 input/output 下） | `remote.comfy_dir` |
+  | 跑 AST 的 python（可复用 ComfyUI 的 venv） | `remote.tagger_python` |
+  | 远端放临时脚本的目录 | `remote.remote_work` |
 
 - 用独立 venv，别装进 ComfyUI 的环境（依赖会打架）。
 - 读视频用 PyAV（自带 ffmpeg 库），GPU 机上不需要装 ffmpeg。
 - AST 打标签可用 ComfyUI 的 venv（有 transformers）；那里的 torchaudio 读 flac 要 torchcodec，改用 PyAV 解码。
-- 显存：large 约 6GB；ComfyUI 常驻会占 20GB，跑之前 POST `/free` 卸载模型。
+- 显存：large 约 6GB；ComfyUI 常驻会占 20GB，跑之前 POST `/free` 卸载模型（脚本会自动按 `remote.comfy` 的端口调）。
 
 ## 3. 设计：环境声窗口 + 场景音效
 

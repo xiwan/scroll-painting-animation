@@ -9,6 +9,7 @@
   python popcheck.py film.mp4 --shifts 0 1 2 3 4 --z 8 --gop 250 --skip 60
 """
 import argparse
+import os
 import subprocess
 
 import numpy as np
@@ -20,6 +21,11 @@ def ffmpeg():
         return imageio_ffmpeg.get_ffmpeg_exe()
     except ImportError:
         return "ffmpeg"
+
+
+def noopt(p):
+    """给 ffmpeg 的路径加 ./ 前缀，防止以 - 开头的文件名被当成选项。"""
+    return p if os.path.isabs(p) or p.startswith("./") else "./" + p
 
 
 def main():
@@ -34,7 +40,7 @@ def main():
     ap.add_argument("--fps", type=float, default=30.0)
     a = ap.parse_args()
     W, H = a.w, a.h
-    p = subprocess.Popen([ffmpeg(), "-v", "error", "-i", a.video, "-vf", f"scale={W}:{H}", "-f", "rawvideo",
+    p = subprocess.Popen([ffmpeg(), "-v", "error", "-i", noopt(a.video), "-vf", f"scale={W}:{H}", "-f", "rawvideo",
                           "-pix_fmt", "gray", "-"], stdout=subprocess.PIPE)
     prev, md = None, []
 

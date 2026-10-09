@@ -1,13 +1,29 @@
 # 布局：功能团、疏密、选图、每张图都用上
 
-零件：`scrollkit.DistrictField`、`scrollkit.SpritePicker`；完整例子：`assets/districts.qingming.json`。
+零件：`scrollkit.DistrictField`、`scrollkit.SpritePicker`；
+完整例子：`assets/districts.qingming.json`，用 `scrollkit.load_district_config()` 加载：
+
+```python
+cfg = K.load_district_config("assets/districts.qingming.json",
+                             clamps=[(lambda g: g[0] > WALL_GX, 12750, 1e18),     # 城内
+                                     (lambda g: g[0] <= WALL_GX, -1e18, 12250)])  # 城外
+field = cfg["field"]                                        # DistrictField
+picker = K.SpritePicker(cfg["groups"], cfg["kinds"], cfg["aff"], has=my_has)
+dens = field.mix(g, cfg["profiles"], "dens", .6)
+```
+
+JSON 里能被代码消费的是 `districts`/`edge_u`/`profiles`/`groups`/`group_kinds`/`affinity`；
+硬边界需要谓词函数，只能在代码里用 `clamps=` 传；带 `_说明` 后缀的键和 `lay_probs_mansion_court`
+是给人读的参考（院落/大宅布局 scrollkit 没有现成零件，要自己在引擎层实现）。
 
 ## 1. 功能团（"团"而不是"带"）
 
 沿卷轴排若干团：`[(名, u0, u1), ...]`。三个手段让它不机械：
 
-1. **软边**：相邻团在 `edge`（约 4 秒镜头）宽的过渡带里按权重混合。
+1. **软边**：相邻团在 `edge` 宽的过渡带里按权重混合。
+   `edge=420` 对应《清》的"约 4 秒镜头"（85.7 单位/秒）；**换镜头速度要重算**：`edge ≈ 4 × speed / cos30`。
 2. **扭曲边界**：u 先加一个随 (u, v) 变化的扰动（几百单位），团的边缘歪歪扭扭，纵深方向上也不齐。
+   `warp` 的默认 260 同样是《清》的尺度，按同样比例缩放。
 3. **硬边界**：城墙这类必须分明的，用 `clamps` 把墙内点的 u 夹到"城内团"区间、墙外夹到"城外团"区间。
 
 每团一份档案（profile）：
@@ -16,15 +32,19 @@
 |---|---|---|
 | dens | 地块真正起房的概率（其余做菜园/空场/树） | 郊野 .55，深巷 .72，桥头/城内商业 .98–1 |
 | gap | 排屋行距系数 | 商业 .45，郊野 1.2，官府 1.8 |
-| kinds | 房屋类型比例（铺面/酒楼/茶坊/住宅/两层宅/仓/农舍） | 商业 shop .6，深巷 res .5 + res2 .4 |
+| kinds | 房屋类型比例 | 商业 shop .6，深巷 res .5 + res2 .4 |
 | light | 夜里灯火系数（门前光、灯笼、亮窗都乘它） | 商业 1.0，深巷 .45，官府 .35 |
-| 院落/大宅概率 | 街坊布局 | 官府区院落 .55，深巷大宅 .25 |
+| 院落/大宅概率 | 街坊布局（引擎层自己实现） | 官府区院落 .55，深巷大宅 .25 |
 
-临主街的地块（街市主街两侧）铺面、酒楼、茶坊的比例再 ×2.5。
+`kinds` 的类别名（铺面/酒楼/茶坊/住宅/两层宅/仓/农舍）和"临主街的铺面酒楼茶坊比例再 ×2.5"
+都是**《清》这类中国市镇的建筑类型学**。换题材要换一整套类别：欧洲城镇是行会屋/联排/教堂/磨坊，
+现代城市是塔楼/板楼/商业综合体/厂房——先定类别表，再定比例。
 
 ## 2. 疏密节奏
 
-先定"每 10 秒房屋数"的目标曲线，再调档案，最后**统计核对**（demo 的 `stats`、正式项目的 dstat 脚本）：
+先定"每 10 秒房屋数"的目标曲线，再调档案，最后**统计核对**（demo 的 `stats`、正式项目的 dstat 脚本）。
+下面这条是《清》的实测曲线，**是例子不是推荐值**——它反映北宋都城"城乡梯度 + 桥头聚集"的空间逻辑，
+换题材要按你自己那套逻辑重画：
 
 ```
 郊野 2–4 → 近郊 4–8 → 河边草市 10–14 → 码头 16–20 → 桥头 28–34（最密）→ 城外街市 18–22

@@ -25,6 +25,22 @@ description: >
 3. **我们看得到画面、听不到声音**。画面靠抽帧、统计、跳帧检查验收；声音只能靠分类模型打标签核对——
    交付时要说清哪些验证过、哪些没法验证。
 
+## 安全须知（涉及远端执行和外部数据，先读）
+
+这个 skill 会让 agent 在 GPU 机上执行命令、读外部 JSON 配置、跑 ComfyUI 工作流。四条硬规则：
+
+1. **配置文件和 workflow JSON 等同代码**。`sfx_config.json` 的 `remote.*` 路径会进远端 shell，
+   `remote.runner[0]` 是会被执行的程序；ComfyUI 的 `/prompt` 默认无鉴权、工作流能加载任意权重和自定义节点。
+   脚本对配置路径做了白名单校验（绝对路径、无空格、无 shell 元字符、至少两级，事件名只许 `[A-Za-z0-9_-]`），
+   但**不要跑来源不明的配置或工作流**。
+2. **`ssm_run.sh` 在远端以 root 执行任意命令**。它执行前会回显调用者身份和命令并要求确认；
+   被脚本/agent 非交互调用时需要显式 `SSM_RUN_YES=1`。GPU 机当一次性实例用：最小权限、不放长期凭据、用完就停。
+3. **远端的输出会进 agent 上下文**。不要在远端跑 `env`、`cat ~/.aws/credentials` 之类会回显凭据的命令
+   （脚本回显远端日志时会对 `AKIA…`/`token=`/`secret=` 做脱敏，但别指望它兜住一切）。
+4. **网络目标默认只允许回环地址**。`comfy_client.py --host` 和 `sfx_config` 的 `remote.comfy` 指向非本机地址时
+   会拒绝执行（本地文件/成片片段会被上传过去）；跨机访问请用 SSM/SSH 端口转发，确实要直连才设
+   `COMFY_ALLOW_REMOTE_HOST=1` / `SFX_ALLOW_REMOTE_HOST=1`。
+
 ## 流程（每步有"过不去就别往下做"的门槛）
 
 ### 1. 读原作，建时间轴表 → `references/source-analysis.md`
@@ -33,6 +49,7 @@ description: >
 每段几秒、什么功能团、每 10 秒几栋房、哪些地标母题、夜里多亮、配什么声。
 
 **门槛**：用户点名的每一条都在表里有位置；每个功能团 ≥8 秒；高潮在 55%–75%；题诗不压名场面。
+（这组数字来自 180 秒单幕平移。片长不同要按比例缩放，但功能团不低于 5 秒；10 分钟以上应考虑分幕——见 source-analysis.md §5.5。）
 
 ### 2. 立风格，生产素材 → `references/assets.md`
 
@@ -46,13 +63,15 @@ description: >
 先跑通 `scripts/scroll_demo.py`（无素材的 14 秒小样，所有层都有），再在它的层次上替换/加东西：
 坐标与尺度、场景构建顺序与占地系统、底图烘焙、画家算法排序、每帧合成顺序、多进程出片。
 
-**门槛**：`preview` 能出任意秒数的帧；setup 打印各层数量（精灵、街段、闲立人、船……）。
+**门槛**：`preview` 能出任意秒数的帧；setup 打印各层数量（精灵、地块、街段、行人、题签、题字、字体……）。
+`scroll_demo.py` 的 `render` 是单进程串行的；多进程出片要自己加，且 `fork` 在 macOS/Windows 不可用（engine.md §6）。
 
 ### 4. 布局：功能团、疏密、选图 → `references/layout.md`
 
 `DistrictField`（软边 + 扭曲边界 + 城墙硬边界）驱动：起房概率、行距、房屋类型比例、院落/大宅比例、选图亲和度、夜里灯火。
 空地做菜园/空场/树。`SpritePicker` 防相邻重复、首次出场加权，`ensure_all_used` 补位。
-北宋都城的完整配置：`assets/districts.qingming.json`。
+北宋都城的完整配置：`assets/districts.qingming.json`，用 `scrollkit.load_district_config()` 加载
+（硬边界要用谓词函数，只能在代码里传 `clamps=`）。里面的房屋类型表和密度曲线是**《清》的实测值，不是推荐值**。
 
 **门槛**：每 10 秒房屋数曲线贴近目标；**素材目录里每张建筑图都出场**（统计逐张核对，未出场列表为空）。
 
@@ -66,12 +85,17 @@ description: >
 选与时代相符的诗、逐字核对、繁体楷书；竖排右起、落款钤印；雾衬以整组字为中心；
 **逐字晕墨显现**、印章最后按上；顶部云气只作点缀。
 
+**门槛**：`FontBank()` 能找到 CJK 字体（找不到会直接报错，别让它静默画成空白）。
+非中文题材用 `InkItem.row()` 横排、换掉印章——text.md 开头有说明。
+
 ### 7. 光 → `references/lighting.md`
 
 昼 → 夜 → 黎明 → 晨（首尾呼应）；发光层按画家顺序一次算好（被挡的灯看不见），灯笼按连通块形状筛（不让红柱变霓虹），
 灯火多少按功能团；**夜色只染画里的景物，题诗衬雾不压暗**。
 
 ### 8. 声音 → `references/audio.md`
+
+**这一步要先有成片**（`cut` 从配置里的 `video` 切片段），实际顺序是「出片 → 配音效 → 一起验收」。
 
 `sfx_mmaudio.py` + JSON 配置：10 秒窗、8 秒步长的环境声 + 定点的场景音效；AST 打标签、对不上的多出候选自动挑；
 正弦/余弦交叉淡化、分段增益、限幅、并入。权重非商用，交付时说明。样例：`assets/sfx_config.example.json`。
@@ -96,7 +120,11 @@ description: >
 | 改了布局后某些东西消失 | qa.md §3 回归清单，engine.md §2 随机数流 |
 | 音效出成配乐 / 雷声 / 没声 | audio.md §4 |
 | 远端命令失败、ComfyUI 连不上 | infra.md §2–3 |
-| 看图工具拒收图片 | qa.md §1 看图限制 |
+| 题诗画成空白/豆腐块、报"找不到 CJK 字体" | text.md §0 |
+| 做短片时永远不入夜 | source-analysis.md §5.2（`DayNight` 默认是 180 秒的绝对秒数）|
+| 换了题材夜里一个灯都不亮 | lighting.md §3（`lantern_mask` 的颜色判据要换）|
+| 配置被脚本拒收（路径/事件名非法） | SKILL.md 安全须知第 1 条 |
+| 看图工具拒收图片 | qa.md §1 |
 
 完整的"症状 → 原因 → 处理"表在 `references/qa.md` §2。
 
@@ -120,7 +148,7 @@ description: >
 | `references/lighting.md` | 昼夜晨昏、发光层、灯笼检测、天气 | 做夜景时 |
 | `references/audio.md` | MMAudio 安装、窗口与事件、AST 核对、混音、许可 | 配音效时 |
 | `references/qa.md` | 工具、症状速查、回归清单、交付说明 | 每轮验收时 |
-| `references/infra.md` | GPU 机、SSM 隧道、显存、成本与停机 | 用云 GPU 时 |
+| `references/infra.md` | 安全须知、GPU 机、ComfyUI 节点与权重前提、IAM 权限、SSM 隧道、成本与停机 | 用云 GPU 时 |
 | `scripts/scrollkit.py` | 可复用零件：Iso/Camera、DistrictField、SpritePicker、InkItem、DayNight、lantern_mask 等 | 写引擎时 import |
 | `scripts/scroll_demo.py` | 最小可运行骨架（`stats` / `preview` / `render`） | 新项目第一步 |
 | `scripts/comfy_client.py` | ComfyUI 提交/等待/拉回/合成透明精灵/上传/释放显存 | 生产素材 |
@@ -146,11 +174,14 @@ python -m pip install numpy pillow imageio-ffmpeg               # 没有这三�
 #   直接 clone 的仓库     S=<repo>/scripts
 S=~/.claude/skills/scroll-painting-animation/scripts
 
-python $S/scroll_demo.py stats                                  # 看功能团与选图是否合理
-python $S/scroll_demo.py preview 2 7.6 10 12.6 --out /tmp/demo  # 白天 / 入夜 / 夜 / 黎明 各一帧
-python $S/scroll_demo.py render --out /tmp/demo.mp4             # 14 秒小样（约 10 秒出完）
-python $S/popcheck.py /tmp/demo.mp4 --skip 20
+python $S/scroll_demo.py stats                                  # 看功能团与选图是否合理（不需要字体）
+python $S/scroll_demo.py preview 2 7.6 10 12.6 --out demo_frames  # 白天 / 入夜 / 夜 / 黎明 各一帧
+python $S/scroll_demo.py render --out demo.mp4                  # 14 秒小样（约 10 秒出完）
+python $S/popcheck.py demo.mp4 --skip 20                        # 应为 0 离群
 ```
 
-依赖：Python 3.10+、numpy、Pillow、imageio-ffmpeg（出片/抽帧）；中文字体（macOS 自带楷体，Linux 装 Noto CJK）。
-GPU 部分（ComfyUI、MMAudio）在远端机器上，见 infra.md。
+依赖：Python 3.10+、numpy、Pillow、imageio-ffmpeg（出片/抽帧）。
+**出画面还需要一个 CJK 字体**：macOS 自带楷体，Windows 自带 simkai，Linux 要装
+（`apt install fonts-noto-cjk` / `dnf install google-noto-sans-cjk-fonts`），或用 `SCROLLKIT_FONT=/path/font.ttf` 指定；
+找不到会直接报错而不是把题诗画成空白（text.md §0）。
+GPU 部分（ComfyUI、MMAudio）在远端机器上，见 infra.md；第 3–7、9 步纯本机，不需要 GPU。

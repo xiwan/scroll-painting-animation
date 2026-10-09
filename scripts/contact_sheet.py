@@ -2,7 +2,7 @@
 有没有抠图残渣、有没有混进文字。长边控制在 1900 以内，数量多时自动分页。
 
 用法:
-  python contact_sheet.py "assets/cut/bld_*.png" --cols 8 --out /tmp/sheet.jpg
+  python contact_sheet.py "assets/cut/bld_*.png" --cols 8 --out sheet.jpg
   python contact_sheet.py a.png b.png c.png --cols 3 --tile 380x300 --bg 236,226,204
 """
 import argparse
@@ -10,6 +10,8 @@ import glob
 import os
 
 from PIL import Image, ImageDraw
+
+Image.MAX_IMAGE_PIXELS = 80_000_000        # 挡住恶意超大图（解压炸弹）打爆内存
 
 
 def main():
@@ -19,7 +21,7 @@ def main():
     ap.add_argument("--tile", default="300x260")
     ap.add_argument("--bg", default="236,226,204")
     ap.add_argument("--max", type=int, default=1900)
-    ap.add_argument("--out", default="/tmp/contact_sheet.jpg")
+    ap.add_argument("--out", default="contact_sheet.jpg")
     a = ap.parse_args()
     files = []
     for f in a.files:

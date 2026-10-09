@@ -1,15 +1,20 @@
-"""从成片（或任意视频）按秒数抽帧，拼成带时间标注的网格图，长边自动控制在 1900 像素以内
-（看图工具：一次请求放多张图时任意一边不能超过 2000 像素，单张不能超过 8000 像素、5MB）。
+"""从成片（或任意视频）按秒数抽帧，拼成带时间标注的网格图，长边默认控制在 1900 像素以内。
+
+1900 这个默认值是迁就"把图贴给 AI agent 看"的输入限制（多图时任意一边 ≤2000、单图 ≤8000 像素/5MB），
+不是画面验收要求——自己肉眼看可以 --max 调大。
 
 用法:
-  python frame_grid.py film.mp4 10 25 45 65 84 100 --cols 2 --out /tmp/grid.jpg
-  python frame_grid.py film.mp4 76:84:1 --cols 3 --crop 1150,300,1650,680 --out /tmp/strip.jpg   # a:b:步长；先裁再拼
+  python frame_grid.py film.mp4 10 25 45 65 84 100 --cols 2 --out grid.jpg
+  python frame_grid.py film.mp4 76:84:1 --cols 3 --crop 1150,300,1650,680 --out strip.jpg   # a:b:步长；先裁再拼
 """
 import argparse
+import os
 import subprocess
 
 import numpy as np
 from PIL import Image, ImageDraw
+
+Image.MAX_IMAGE_PIXELS = 300_000_000        # 成片抽帧会很大，但也别无上限
 
 
 def ffmpeg():
@@ -20,9 +25,14 @@ def ffmpeg():
         return "ffmpeg"
 
 
+def noopt(p):
+    """给 ffmpeg 的路径加 ./ 前缀，防止以 - 开头的文件名被当成选项。"""
+    return p if os.path.isabs(p) or p.startswith("./") else "./" + p
+
+
 def grab(video, t):
-    raw = subprocess.run([ffmpeg(), "-v", "error", "-ss", f"{t:.3f}", "-i", video, "-frames:v", "1", "-f", "image2pipe",
-                          "-vcodec", "png", "-"], capture_output=True, check=True).stdout
+    raw = subprocess.run([ffmpeg(), "-v", "error", "-ss", f"{t:.3f}", "-i", noopt(video), "-frames:v", "1",
+                          "-f", "image2pipe", "-vcodec", "png", "-"], capture_output=True, check=True).stdout
     import io
     return Image.open(io.BytesIO(raw)).convert("RGB")
 
@@ -45,7 +55,7 @@ def main():
     ap.add_argument("--cols", type=int, default=2)
     ap.add_argument("--crop", help="x0,y0,x1,y1（原尺寸像素）")
     ap.add_argument("--max", type=int, default=1900, help="拼图长边上限")
-    ap.add_argument("--out", default="/tmp/frame_grid.jpg")
+    ap.add_argument("--out", default="frame_grid.jpg")
     a = ap.parse_args()
     ts = parse_times(a.times)
     tiles = []
