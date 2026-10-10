@@ -16,6 +16,8 @@
 
 镜头匀速横移，昼 → 夜 → 黎明 → 晨首尾呼应；行人车马船在等距场景上走动，题诗逐字晕墨显现。
 
+**在线互动版 → <https://xiwan.github.io/qingming-scroll/>**（上下滑动 = 左右展卷，见[关联项目](#关联项目)）
+
 | | |
 |---|---|
 | ![城郊田垄与题诗](docs/images/qingming-01-countryside.jpg) <br> **城郊**：田垄、柳岸、驴队，题诗竖排右起、雾衬托底 | ![虹桥](docs/images/qingming-02-rainbow-bridge.jpg) <br> **虹桥（高潮段）**：漕船过弯、桥上围观、桅杆 |
@@ -37,6 +39,19 @@
 |---|---|
 | ![素材对照表](docs/images/pipeline-01-contact-sheet.jpg) | ![成片抽帧](docs/images/pipeline-02-frame-grid.jpg) |
 | `contact_sheet.py`：每批新图必过的对照表（风格统一、朝向登记、无抠图残渣、无文字、体量合理） | `frame_grid.py`：成片抽帧拼图，验收时逐格核对时间轴 |
+
+## 关联项目
+
+### [qingming-scroll](https://github.com/xiwan/qingming-scroll) ·《清明上河图》卷轴互动版
+
+**在线体验：<https://xiwan.github.io/qingming-scroll/>**
+
+把上面这部《清明上河图》成片做成网页：**上下滑动 = 左右展卷**，滚动位置就是播放时刻——停下画面就停，
+往回滚就倒着走，快慢进退由观众自己掌控；也可以一键自动展卷。
+
+- 全卷缩略条：点哪跳哪，按住拖动快速翻卷；段落、昼夜天色、三首题诗都有标记
+- 背景音乐《汴河画卷》两首循环播放，环境音跟着滚动速度响起
+- 纯静态页面，推到 main 后由 GitHub Actions 自动发布到 GitHub Pages
 
 ---
 
